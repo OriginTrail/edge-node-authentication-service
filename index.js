@@ -96,26 +96,14 @@ passport.use(
     })
 );
 
-function isBooleanString(str) {
-    if (str.toLowerCase() === 'true') {
-        return true;
-    } else if (str.toLowerCase() === 'false') {
-        return false;
-    } else {
-        return null; // or handle cases where the string is not a boolean value
-    }
-}
-
 app.get('/auth/check', async (req, res, next) => {
-    let isAuthEnabled;
     const authEnabledConfig = await UserConfig.findOne({
         where: {
             option: 'auth_enabled'
         }
     });
-    isAuthEnabled = authEnabledConfig
-        ? isBooleanString(authEnabledConfig.value)
-        : true;
+    const isAuthEnabled =
+        authEnabledConfig && authEnabledConfig.value.toLowerCase() === 'true';
 
     if (!isAuthEnabled) {
         let user = {};
@@ -129,38 +117,111 @@ app.get('/auth/check', async (req, res, next) => {
         return res.json({ authenticated: false, user: user });
     }
 
-    if (req.isAuthenticated()) {
-        const user = await User.findOne({
-            where: { username: req.user.username }
-        });
-        const { password, ...safeUser } = user.dataValues;
-        safeUser.config = await user.config();
-        return res.json({ authenticated: true, user: safeUser });
+    const authHeader = req.headers['authorization'];
+    if (authHeader && authHeader.startsWith('Bearer ')) {
+        passport.authenticate(
+            'jwt',
+            { session: false },
+            async (err, user, info) => {
+                if (err) return next(err);
+                if (!user) {
+                    return res
+                        .status(401)
+                        .json({ authenticated: false, user: null });
+                }
+                const userDB = await User.findOne({
+                    where: { username: user.username }
+                });
+                const { password, ...safeUser } = userDB.dataValues;
+                safeUser.config = await userDB.config();
+                return res.json({ authenticated: true, user: safeUser });
+            }
+        )(req, res, next);
+    } else {
+        if (req.isAuthenticated()) {
+            const user = await User.findOne({
+                where: { username: req.user.username }
+            });
+            const { password, ...safeUser } = user.dataValues;
+            safeUser.config = await user.config();
+            return res.json({ authenticated: true, user: safeUser });
+        }
+        return res.status(401).json({ authenticated: false, user: null });
     }
-    return res.json({ authenticated: false, user: null });
-    // passport.authenticate('jwt', { session: false }, (err, user, info) => {
-    //     if (err) return next(err);
-    //     if (!user) return res.status(401).json({ authenticated: false });
-    //     req.user = user;
-    //     res.json({ authenticated: true, user });
-    // })(req, res, next);
 });
 
 app.get('/auth/wallets', async (req, res, next) => {
-    if (req.isAuthenticated()) {
-        const user = await User.findOne({
-            where: { username: req.user.username }
-        });
-        const wallets = await UserWallet.findAll({
-            where: {
-                user_id: user.id
+    const authHeader = req.headers['authorization'];
+
+    if (authHeader && authHeader.startsWith('Bearer ')) {
+        // Verify the token using Passport's JWT strategy
+        passport.authenticate(
+            'jwt',
+            { session: false },
+            async (err, user, info) => {
+                try {
+                    if (err) {
+                        return next(err);
+                    }
+                    if (!user) {
+                        return res
+                            .status(401)
+                            .json({ authenticated: false, user: null });
+                    }
+
+                    // Fetch the user from the database
+                    const userDB = await User.findOne({
+                        where: { username: user.username }
+                    });
+                    if (!userDB) {
+                        return res.status(404).json({
+                            authenticated: false,
+                            message: 'User not found'
+                        });
+                    }
+
+                    // Fetch the user's wallets
+                    const wallets = await UserWallet.findAll({
+                        where: {
+                            user_id: userDB.id
+                        }
+                    });
+
+                    // Prepare a safe version of the user object
+                    const { password, ...safeUser } = user.dataValues;
+                    safeUser.config = await user.config();
+
+                    // Send the final response
+                    return res.json({
+                        authenticated: true,
+                        user: safeUser,
+                        wallets
+                    });
+                } catch (error) {
+                    console.error(
+                        'Error occurred during authentication:',
+                        error
+                    );
+                    return next(error);
+                }
             }
-        });
-        const { password, ...safeUser } = user.dataValues;
-        safeUser.config = await user.config();
-        return res.json({ authenticated: true, user: safeUser, wallets });
+        )(req, res, next);
+    } else {
+        if (req.isAuthenticated()) {
+            const user = await User.findOne({
+                where: { username: req.user.username }
+            });
+            const wallets = await UserWallet.findAll({
+                where: {
+                    user_id: user.id
+                }
+            });
+            const { password, ...safeUser } = user.dataValues;
+            safeUser.config = await user.config();
+            return res.json({ authenticated: true, user: safeUser, wallets });
+        }
+        return res.status(401).json({ authenticated: false, user: null });
     }
-    return res.json({ authenticated: false, user: null });
 });
 
 app.get('/auth/params/public', async (req, res, next) => {
@@ -203,7 +264,11 @@ app.post('/login', (req, res, next) => {
                     const { password, ...safeUser } = user.dataValues;
                     safeUser.config = await user.config();
 
-                    res.json({ message: 'Login successful', user: safeUser });
+                    res.json({
+                        message: 'Login successful',
+                        token,
+                        user: safeUser
+                    });
                 });
             })
             .catch((err) => {
