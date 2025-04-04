@@ -151,6 +151,7 @@ app.get('/check', async (req, res, next) => {
 
 app.get('/wallets', async (req, res, next) => {
     const authHeader = req.headers['authorization'];
+    const browserOnly = req.query.browser_only === 'true';
 
     if (authHeader && authHeader.startsWith('Bearer ')) {
         // Verify the token using Passport's JWT strategy
@@ -182,7 +183,8 @@ app.get('/wallets', async (req, res, next) => {
                     // Fetch the user's wallets
                     const wallets = await UserWallet.findAll({
                         where: {
-                            user_id: userDB.id
+                            user_id: userDB.id,
+                            browser_only: browserOnly
                         }
                     });
 
@@ -212,7 +214,8 @@ app.get('/wallets', async (req, res, next) => {
             });
             const wallets = await UserWallet.findAll({
                 where: {
-                    user_id: user.id
+                    user_id: user.id,
+                    browser_only: browserOnly
                 }
             });
             const { password, ...safeUser } = user.dataValues;
