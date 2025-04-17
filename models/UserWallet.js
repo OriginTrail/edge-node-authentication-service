@@ -15,6 +15,11 @@ module.exports = (sequelize, DataTypes) => {
             blockchain: {
                 type: DataTypes.STRING,
                 allowNull: false
+            },
+            browser_only: {
+                type: DataTypes.BOOLEAN,
+                allowNull: false,
+                defaultValue: false
             }
         },
         {
