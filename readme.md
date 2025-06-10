@@ -46,8 +46,8 @@
       ```
 
 Seeder will create example user with following credentials:
-- username: admin
-- password: admin123
+- username: my_edge_node
+- password: edge_node_pass
 
 Authentication flow explained **(Edge node interface already have this integrated, no need for further steps)**:
 1. POST /login - provide username and password [x-www-form], this will embed cookie in next requests

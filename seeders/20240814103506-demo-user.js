@@ -19,6 +19,6 @@ module.exports = {
     },
 
     down: async (queryInterface, Sequelize) => {
-        return queryInterface.bulkDelete('Users', { username: 'admin' }, {});
+        return queryInterface.bulkDelete('Users', { username: 'my_edge_node' }, {});
     }
 };
